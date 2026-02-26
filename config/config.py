@@ -7,6 +7,8 @@ class Settings(BaseSettings):
         env_file=Path(__file__).parent.parent / ".env"
     )
 
+    web_share_username: str
+    web_share_pw: str
     youtube_api_key: str
     channels: list[str] = [
         "@TwicebakedJake",
