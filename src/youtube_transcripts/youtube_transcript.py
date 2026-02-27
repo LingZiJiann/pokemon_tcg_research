@@ -1,10 +1,13 @@
+import random
 import time
 
 import pandas as pd
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from tqdm.auto import tqdm
 from youtube_transcript_api import (
-    YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
+    YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled,
+    YouTubeRequestFailed, RequestBlocked,
 )
 # Only require if YouTube block requests
 # from youtube_transcript_api.proxies import WebshareProxyConfig
@@ -13,6 +16,46 @@ from config.config import settings
 from src.utils.logger import get_logger
 
 logger = get_logger("youtube_transcript")
+
+
+def _is_retryable_http_error(e: Exception) -> bool:
+    """Check if a googleapiclient HttpError is worth retrying."""
+    if not isinstance(e, HttpError):
+        return False
+    return e.status_code in (429, 500, 503)
+
+
+def _is_retryable_transcript_error(e: Exception) -> bool:
+    """Check if a youtube-transcript-api error is worth retrying."""
+    return isinstance(e, (YouTubeRequestFailed, RequestBlocked))
+
+
+def _retry_on_error(func, retryable_check, description="API call"):
+    """Call func() with exponential backoff + jitter on retryable errors."""
+    max_retries = settings.api_max_retries
+    base_delay = settings.api_retry_base_delay
+    max_delay = settings.api_retry_max_delay
+
+    for attempt in range(max_retries + 1):
+        try:
+            return func()
+        except Exception as e:
+            if not retryable_check(e):
+                raise
+            if attempt == max_retries:
+                logger.error(
+                    "%s failed after %d retries: %s", description, max_retries, e
+                )
+                raise
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            jitter = random.uniform(0, delay * 0.5)
+            total_delay = delay + jitter
+            logger.warning(
+                "%s failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                description, attempt + 1, max_retries, e, total_delay
+            )
+            time.sleep(total_delay)
+
 
 class YouTubeTranscriptCollector:
     def __init__(self):
@@ -39,10 +82,18 @@ class YouTubeTranscriptCollector:
                 - 'channel_title' (str): The title of the channel.
         """
         if channel_input.startswith("UC") and len(channel_input) == 24:
-            resp = self.youtube.channels().list(part="snippet", id=channel_input).execute()
+            resp = _retry_on_error(
+                lambda: self.youtube.channels().list(part="snippet", id=channel_input).execute(),
+                _is_retryable_http_error,
+                description=f"channels.list(id={channel_input})",
+            )
         else:
             handle = channel_input.lstrip("@")
-            resp = self.youtube.channels().list(part="snippet", forHandle=handle).execute()
+            resp = _retry_on_error(
+                lambda h=handle: self.youtube.channels().list(part="snippet", forHandle=h).execute(),
+                _is_retryable_http_error,
+                description=f"channels.list(forHandle={handle})",
+            )
 
         if not resp.get("items"):
             raise ValueError(f"Channel not found: {channel_input}")
@@ -64,7 +115,11 @@ class YouTubeTranscriptCollector:
         Returns:
             str: The playlist ID of the channel's uploads playlist.
         """
-        resp = self.youtube.channels().list(part="contentDetails", id=channel_id).execute()
+        resp = _retry_on_error(
+            lambda: self.youtube.channels().list(part="contentDetails", id=channel_id).execute(),
+            _is_retryable_http_error,
+            description=f"channels.list(contentDetails, id={channel_id})",
+        )
         return resp["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
     
     def _get_videos_from_playlist(self, playlist_id: str, max_videos=None) -> list:
@@ -91,12 +146,18 @@ class YouTubeTranscriptCollector:
         next_page_token = None
 
         while True:
-            resp = self.youtube.playlistItems().list(
-                part="snippet",
-                playlistId=playlist_id,
-                maxResults=50,
-                pageToken=next_page_token,
-            ).execute()
+            page_token = next_page_token
+
+            resp = _retry_on_error(
+                lambda: self.youtube.playlistItems().list(
+                    part="snippet",
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
+                ).execute(),
+                _is_retryable_http_error,
+                description=f"playlistItems.list(playlist={playlist_id})",
+            )
 
             for item in resp["items"]:
                 snippet = item["snippet"]
@@ -132,16 +193,23 @@ class YouTubeTranscriptCollector:
             the transcript is unavailable.
         """
         try:
-            ytt_api = YouTubeTranscriptApi()
-            transcript_list = ytt_api.list(video_id)
+            def _fetch():
+                ytt_api = YouTubeTranscriptApi()
+                transcript_list = ytt_api.list(video_id)
 
-            try:
-                transcript = transcript_list.find_transcript([self.language])
-            except NoTranscriptFound:
-                transcript = transcript_list.find_generated_transcript([self.language])
+                try:
+                    transcript = transcript_list.find_transcript([self.language])
+                except NoTranscriptFound:
+                    transcript = transcript_list.find_generated_transcript([self.language])
 
-            segments = transcript.fetch()
-            return " ".join(seg.text for seg in segments)
+                segments = transcript.fetch()
+                return " ".join(seg.text for seg in segments)
+
+            return _retry_on_error(
+                _fetch,
+                _is_retryable_transcript_error,
+                description=f"transcript({video_id})",
+            )
 
         except (NoTranscriptFound, TranscriptsDisabled):
             return None
@@ -199,7 +267,7 @@ class YouTubeTranscriptCollector:
                     "transcript":           transcript,
                     "transcript_available": transcript is not None,
                 })
-                time.sleep(2)
+                time.sleep(settings.transcript_delay)
 
         df = pd.DataFrame(all_records)
         logger.info(
