@@ -5,7 +5,7 @@ from src.embeddings.vector_store import VectorStore
 def main():
     collector = YouTubeTranscriptCollector()
     df = collector.collect()
-    
+
     store = VectorStore()
     store.add_from_dataframe(df)
     print(f"Collection size: {store.collection.count()} chunks")

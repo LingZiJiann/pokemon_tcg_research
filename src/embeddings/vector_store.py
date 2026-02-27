@@ -44,7 +44,7 @@ class VectorStore:
                 ``transcript``, ``transcript_available``, ``channel``,
                 ``channel_id``, ``published_at``, and ``url``.
         """
-        available = df[df["transcript_available"] == True]
+        available = df[df["transcript_available"]]
         if available.empty:
             logger.warning("No transcripts available to embed.")
             return
@@ -56,7 +56,9 @@ class VectorStore:
                 logger.info(f"Skipping '{row['title']}' — already in store.")
                 continue
 
-            chunks = chunk_text(row["transcript"], settings.chunk_size, settings.chunk_overlap)
+            chunks = chunk_text(
+                row["transcript"], settings.chunk_size, settings.chunk_overlap
+            )
             if not chunks:
                 logger.warning(f"No chunks produced for video {video_id}.")
                 continue

@@ -6,8 +6,11 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from tqdm.auto import tqdm
 from youtube_transcript_api import (
-    YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled,
-    YouTubeRequestFailed, RequestBlocked,
+    YouTubeTranscriptApi,
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    YouTubeRequestFailed,
+    RequestBlocked,
 )
 # Only require if YouTube block requests
 # from youtube_transcript_api.proxies import WebshareProxyConfig
@@ -47,12 +50,16 @@ def _retry_on_error(func, retryable_check, description="API call"):
                     "%s failed after %d retries: %s", description, max_retries, e
                 )
                 raise
-            delay = min(base_delay * (2 ** attempt), max_delay)
+            delay = min(base_delay * (2**attempt), max_delay)
             jitter = random.uniform(0, delay * 0.5)
             total_delay = delay + jitter
             logger.warning(
                 "%s failed (attempt %d/%d): %s. Retrying in %.1fs...",
-                description, attempt + 1, max_retries, e, total_delay
+                description,
+                attempt + 1,
+                max_retries,
+                e,
+                total_delay,
             )
             time.sleep(total_delay)
 
@@ -63,19 +70,19 @@ class YouTubeTranscriptCollector:
         self.channels = settings.channels
         self.max_videos_per_channel = settings.max_videos_per_channel
         self.language = settings.language
-    
+
     def _resolve_channel_id(self, channel_input: str) -> dict:
         """
         Resolve a YouTube channel handle or ID to its channel ID and title.
 
-        This function takes either a full channel ID (starting with 'UC') or a 
-        channel handle (starting with '@') and returns a dictionary containing 
+        This function takes either a full channel ID (starting with 'UC') or a
+        channel handle (starting with '@') and returns a dictionary containing
         the channel ID and the channel's title.
 
         Args:
-            channel_input (str): The YouTube channel identifier, either a channel 
+            channel_input (str): The YouTube channel identifier, either a channel
                 ID (24 characters, starting with 'UC') or a handle (starting with '@').
-        
+
         Returns:
             dict: A dictionary with keys:
                 - 'channel_id' (str): The YouTube channel's unique ID.
@@ -83,14 +90,18 @@ class YouTubeTranscriptCollector:
         """
         if channel_input.startswith("UC") and len(channel_input) == 24:
             resp = _retry_on_error(
-                lambda: self.youtube.channels().list(part="snippet", id=channel_input).execute(),
+                lambda: self.youtube.channels()
+                .list(part="snippet", id=channel_input)
+                .execute(),
                 _is_retryable_http_error,
                 description=f"channels.list(id={channel_input})",
             )
         else:
             handle = channel_input.lstrip("@")
             resp = _retry_on_error(
-                lambda h=handle: self.youtube.channels().list(part="snippet", forHandle=h).execute(),
+                lambda h=handle: self.youtube.channels()
+                .list(part="snippet", forHandle=h)
+                .execute(),
                 _is_retryable_http_error,
                 description=f"channels.list(forHandle={handle})",
             )
@@ -100,13 +111,13 @@ class YouTubeTranscriptCollector:
 
         item = resp["items"][0]
         return {"channel_id": item["id"], "channel_title": item["snippet"]["title"]}
-    
+
     def _get_uploads_playlist_id(self, channel_id: str) -> str:
         """
         Retrieve the uploads playlist ID for a given YouTube channel.
 
-        Every YouTube channel has a special "uploads" playlist that contains all 
-        videos uploaded by that channel. This function fetches the playlist ID 
+        Every YouTube channel has a special "uploads" playlist that contains all
+        videos uploaded by that channel. This function fetches the playlist ID
         corresponding to that uploads playlist.
 
         Args:
@@ -116,30 +127,32 @@ class YouTubeTranscriptCollector:
             str: The playlist ID of the channel's uploads playlist.
         """
         resp = _retry_on_error(
-            lambda: self.youtube.channels().list(part="contentDetails", id=channel_id).execute(),
+            lambda: self.youtube.channels()
+            .list(part="contentDetails", id=channel_id)
+            .execute(),
             _is_retryable_http_error,
             description=f"channels.list(contentDetails, id={channel_id})",
         )
         return resp["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-    
+
     def _get_videos_from_playlist(self, playlist_id: str, max_videos=None) -> list:
         """
         Fetch video details from a YouTube playlist.
 
-        This function retrieves all videos from the specified playlist, returning 
-        their video IDs, titles, and publication dates. It handles pagination 
+        This function retrieves all videos from the specified playlist, returning
+        their video IDs, titles, and publication dates. It handles pagination
         automatically and can optionally limit the number of videos returned.
 
         Args:
             playlist_id (str): The ID of the YouTube playlist to fetch videos from.
-            max_videos (int, optional): The maximum number of videos to retrieve. 
+            max_videos (int, optional): The maximum number of videos to retrieve.
                 If None, all videos in the playlist are returned.
-        
+
         Returns:
             list of dict: A list of dictionaries, each containing:
                 - 'video_id' (str): The unique ID of the video.
                 - 'title' (str): The title of the video.
-                - 'published_at' (str): The ISO 8601 timestamp of when the video 
+                - 'published_at' (str): The ISO 8601 timestamp of when the video
                 was published.
         """
         videos = []
@@ -149,23 +162,27 @@ class YouTubeTranscriptCollector:
             page_token = next_page_token
 
             resp = _retry_on_error(
-                lambda: self.youtube.playlistItems().list(
+                lambda: self.youtube.playlistItems()
+                .list(
                     part="snippet",
                     playlistId=playlist_id,
                     maxResults=50,
                     pageToken=page_token,
-                ).execute(),
+                )
+                .execute(),
                 _is_retryable_http_error,
                 description=f"playlistItems.list(playlist={playlist_id})",
             )
 
             for item in resp["items"]:
                 snippet = item["snippet"]
-                videos.append({
-                    "video_id":     snippet["resourceId"]["videoId"],
-                    "title":        snippet["title"],
-                    "published_at": snippet["publishedAt"],
-                })
+                videos.append(
+                    {
+                        "video_id": snippet["resourceId"]["videoId"],
+                        "title": snippet["title"],
+                        "published_at": snippet["publishedAt"],
+                    }
+                )
 
             next_page_token = resp.get("nextPageToken")
             if not next_page_token:
@@ -174,25 +191,26 @@ class YouTubeTranscriptCollector:
                 break
 
         return videos[:max_videos] if max_videos else videos
-    
+
     def _get_transcript(self, video_id: str) -> str | None:
         """
         Fetch the transcript text for a YouTube video.
 
-        This function retrieves the transcript for the specified video in the 
-        requested language. It first tries to fetch a manually created transcript, 
-        and if unavailable, falls back to an automatically generated transcript. 
+        This function retrieves the transcript for the specified video in the
+        requested language. It first tries to fetch a manually created transcript,
+        and if unavailable, falls back to an automatically generated transcript.
         If no transcript is available or an error occurs, it returns None.
 
         Args:
             video_id (str): The unique ID of the YouTube video.
             language (str, optional): Defaults to 'en'.
-        
+
         Returns:
-            str or None: The full transcript text as a single string, or None if 
+            str or None: The full transcript text as a single string, or None if
             the transcript is unavailable.
         """
         try:
+
             def _fetch():
                 ytt_api = YouTubeTranscriptApi()
                 transcript_list = ytt_api.list(video_id)
@@ -200,7 +218,9 @@ class YouTubeTranscriptCollector:
                 try:
                     transcript = transcript_list.find_transcript([self.language])
                 except NoTranscriptFound:
-                    transcript = transcript_list.find_generated_transcript([self.language])
+                    transcript = transcript_list.find_generated_transcript(
+                        [self.language]
+                    )
 
                 segments = transcript.fetch()
                 return " ".join(seg.text for seg in segments)
@@ -216,7 +236,7 @@ class YouTubeTranscriptCollector:
         except Exception as e:
             logger.warning("Error fetching transcript for %s: %s", video_id, e)
             return None
-    
+
     def collect(self) -> pd.DataFrame:
         """
         Collect transcripts for all configured YouTube channels.
@@ -242,14 +262,18 @@ class YouTubeTranscriptCollector:
             logger.info("Processing channel: %s", channel_input)
 
             try:
-                channel_info  = self._resolve_channel_id(channel_input)
-                channel_id    = channel_info["channel_id"]
+                channel_info = self._resolve_channel_id(channel_input)
+                channel_id = channel_info["channel_id"]
                 channel_title = channel_info["channel_title"]
                 logger.info("Resolved channel: %s (%s)", channel_title, channel_id)
 
                 playlist_id = self._get_uploads_playlist_id(channel_id)
-                videos      = self._get_videos_from_playlist(playlist_id, max_videos=self.max_videos_per_channel)
-                logger.info("Found %d videos for channel: %s", len(videos), channel_title)
+                videos = self._get_videos_from_playlist(
+                    playlist_id, max_videos=self.max_videos_per_channel
+                )
+                logger.info(
+                    "Found %d videos for channel: %s", len(videos), channel_title
+                )
 
             except Exception as e:
                 logger.error("Could not fetch channel %s: %s", channel_input, e)
@@ -257,21 +281,25 @@ class YouTubeTranscriptCollector:
 
             for video in tqdm(videos, desc=f"Transcripts [{channel_title}]"):
                 transcript = self._get_transcript(video["video_id"])
-                all_records.append({
-                    "channel":              channel_title,
-                    "channel_id":           channel_id,
-                    "video_id":             video["video_id"],
-                    "title":                video["title"],
-                    "published_at":         video["published_at"],
-                    "url":                  f"https://www.youtube.com/watch?v={video['video_id']}",
-                    "transcript":           transcript,
-                    "transcript_available": transcript is not None,
-                })
+                all_records.append(
+                    {
+                        "channel": channel_title,
+                        "channel_id": channel_id,
+                        "video_id": video["video_id"],
+                        "title": video["title"],
+                        "published_at": video["published_at"],
+                        "url": f"https://www.youtube.com/watch?v={video['video_id']}",
+                        "transcript": transcript,
+                        "transcript_available": transcript is not None,
+                    }
+                )
                 time.sleep(settings.transcript_delay)
 
         df = pd.DataFrame(all_records)
         logger.info(
             "Done. %d videos total. Transcripts available: %d / %d",
-            len(df), df["transcript_available"].sum(), len(df)
+            len(df),
+            df["transcript_available"].sum(),
+            len(df),
         )
         return df
