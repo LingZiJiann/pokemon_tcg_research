@@ -9,17 +9,17 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "chromadb",
-    "google-api-python-client",
+    "google-api-python-client>=2.190.0",
     "pandas",
-    "pydantic-settings",
+    "pydantic-settings>=2.13.1",
     "sentence-transformers",
-    "tqdm",
-    "youtube-transcript-api",
+    "tqdm>=4.67.1",
+    "youtube-transcript-api>=1.2.4",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
+    "pytest>=9.0.2",
     "black",
     "ruff",
 ]
