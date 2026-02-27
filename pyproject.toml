@@ -8,8 +8,13 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "sentence-transformers",
     "chromadb",
+    "google-api-python-client",
+    "pandas",
+    "pydantic-settings",
+    "sentence-transformers",
+    "tqdm",
+    "youtube-transcript-api",
 ]
 
 [project.optional-dependencies]
