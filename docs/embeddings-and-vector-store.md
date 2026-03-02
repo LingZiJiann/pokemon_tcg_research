@@ -90,7 +90,7 @@ All settings live in `config/config.py` and can be overridden via `.env`:
 | `embedding_model` | `all-MiniLM-L6-v2` | Sentence-transformers model name |
 | `chunk_size` | `500` | Characters per chunk |
 | `chunk_overlap` | `100` | Overlapping characters between chunks |
-| `vector_db_path` | `./chroma_db` | Directory where ChromaDB persists data |
+| `vector_db_path` | `./data/chroma_db` | Directory where ChromaDB persists data |
 | `collection_name` | `pokemon_tcg_transcripts` | ChromaDB collection name |
 
 `.env` example:
@@ -99,7 +99,7 @@ All settings live in `config/config.py` and can be overridden via `.env`:
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 CHUNK_SIZE=500
 CHUNK_OVERLAP=100
-VECTOR_DB_PATH=./chroma_db
+VECTOR_DB_PATH=./data/chroma_db
 COLLECTION_NAME=pokemon_tcg_transcripts
 ```
 
