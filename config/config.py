@@ -25,8 +25,11 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     chunk_size: int = 500
     chunk_overlap: int = 100
-    vector_db_path: str = "./chroma_db"
+    vector_db_path: str = "./data/chroma_db"
     collection_name: str = "pokemon_tcg_transcripts"
+
+    # SQLite transcript store
+    transcript_db_path: str = "./data/transcripts.db"
 
 
 settings = Settings()
