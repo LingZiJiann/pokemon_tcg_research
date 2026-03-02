@@ -22,6 +22,7 @@ Collect YouTube transcripts from Pokemon TCG content creators, embed them into a
 ```
 pokemon_tcg_research/
 ├── main.py                         # Entry point: collect → embed → query
+├── youtube_transcript.ipynb        # Prototype notebook: fetch & inspect transcripts interactively
 ├── config/
 │   └── config.py                   # Pydantic Settings (all config + .env overrides)
 ├── src/
@@ -90,5 +91,6 @@ VectorStore.query(text)                — cosine similarity search → ranked r
 
 Feature docs live in [`docs/`](docs/):
 
+- [`youtube-transcript-notebook.md`](docs/youtube-transcript.md) — production module reference: `YouTubeTranscriptCollector` class, methods, output schema, retry helpers, proxy config
 - [`api-rate-limiting.md`](docs/api-rate-limiting.md) — rate limiting, retry logic, error handling table
 - [`embeddings-and-vector-store.md`](docs/embeddings-and-vector-store.md) — chunking, embedding model, ChromaDB schema, query format
