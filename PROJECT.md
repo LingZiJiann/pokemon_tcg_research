@@ -28,12 +28,16 @@ pokemon_tcg_research/
 ├── src/
 │   ├── youtube_transcripts/
 │   │   └── youtube_transcript.py   # YouTubeTranscriptCollector — fetch & retry
+│   ├── database/
+│   │   └── transcript_db.py        # TranscriptDatabase — persist & load raw transcripts (SQLite)
 │   ├── embeddings/
 │   │   ├── chunker.py              # chunk_text() — character-based overlap chunking
 │   │   └── vector_store.py         # VectorStore — embed, upsert, query
 │   └── utils/
 │       └── logger.py               # Shared logger
-├── chroma_db/                      # Persistent ChromaDB data (gitignored)
+├── data/                           # Persistent data files (gitignored)
+│   ├── chroma_db/                  # ChromaDB vector store
+│   └── transcripts.db              # SQLite transcript database
 ├── logs/                           # Per-run log files
 ├── docs/                           # Feature documentation (auto-loaded by PROJECT.md)
 └── pyproject.toml
@@ -54,7 +58,7 @@ pandas DataFrame
 VectorStore.add_from_dataframe()       — chunks, embeds, upserts into ChromaDB
        │
        ▼
-ChromaDB (./chroma_db)
+ChromaDB (./data/chroma_db)
        │
        ▼
 VectorStore.query(text)                — cosine similarity search → ranked results
@@ -74,8 +78,9 @@ VectorStore.query(text)                — cosine similarity search → ranked r
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers model |
 | `CHUNK_SIZE` | `500` | Characters per chunk |
 | `CHUNK_OVERLAP` | `100` | Overlapping characters between chunks |
-| `VECTOR_DB_PATH` | `./chroma_db` | ChromaDB persistence directory |
+| `VECTOR_DB_PATH` | `./data/chroma_db` | ChromaDB persistence directory |
 | `COLLECTION_NAME` | `pokemon_tcg_transcripts` | ChromaDB collection name |
+| `TRANSCRIPT_DB_PATH` | `./data/transcripts.db` | SQLite transcript database path |
 
 ## Features Completed
 
@@ -86,11 +91,13 @@ VectorStore.query(text)                — cosine similarity search → ranked r
 - [x] Local sentence-transformer embedding (no external API)
 - [x] Persistent ChromaDB vector store with idempotent ingestion
 - [x] Semantic query with optional metadata filtering
+- [x] SQLite transcript database: raw transcript storage with idempotent inserts, independent of ChromaDB
 
 ## Documentation
 
 Feature docs live in [`docs/`](docs/):
 
-- [`youtube-transcript-notebook.md`](docs/youtube-transcript.md) — production module reference: `YouTubeTranscriptCollector` class, methods, output schema, retry helpers, proxy config
+- [`youtube-transcript.md`](docs/youtube-transcript.md) — production module reference: `YouTubeTranscriptCollector` class, methods, output schema, retry helpers, proxy config
 - [`api-rate-limiting.md`](docs/api-rate-limiting.md) — rate limiting, retry logic, error handling table
 - [`embeddings-and-vector-store.md`](docs/embeddings-and-vector-store.md) — chunking, embedding model, ChromaDB schema, query format
+- [`sqlite-transcript-database.md`](docs/sqlite-transcript-database.md) — `TranscriptDatabase` class, schema, idempotent save/load, design decisions
