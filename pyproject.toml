@@ -8,8 +8,10 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "anthropic>=0.40.0",
     "chromadb>=1.5.1",
     "google-api-python-client>=2.190.0",
+    "ollama>=0.4.0",
     "pandas>=3.0.1",
     "pydantic-settings>=2.13.1",
     "sentence-transformers>=5.2.3",
