@@ -1,0 +1,153 @@
+# AI Summarization Agent
+
+## Overview
+
+Raw transcripts stored in SQLite are summarized by an AI agent after each collection run. Summaries are persisted to a dedicated `summaries` table in the same database, independent of the ChromaDB vector store.
+
+Claude Haiku (`claude-haiku-4-5-20251001`) is used as the primary model — the cheapest Claude model. If Claude fails for any reason (missing API key, rate limit, network error), the agent falls back automatically to a local Ollama model.
+
+## Architecture
+
+```
+TranscriptDatabase.get_unsummarized_transcripts()
+        │
+        ▼
+  pandas DataFrame  (only videos with no summary row + transcript_available = 1)
+        │
+        ▼
+TranscriptSummarizer._summarize_one()
+        │
+        ├──► Claude Haiku (claude-haiku-4-5-20251001)   — primary
+        │         │ on any exception
+        └──► Ollama (gpt-oss:20b)                       — fallback
+        │
+        ▼
+TranscriptDatabase.save_summary()   — INSERT OR IGNORE into summaries table
+```
+
+## Components
+
+### `src/summarizer/summarizer.py`
+
+`TranscriptSummarizer` class — orchestrates summarization and persistence.
+
+**Initialization:**
+
+```python
+summarizer = TranscriptSummarizer(db=db)   # pass existing TranscriptDatabase instance
+# or
+summarizer = TranscriptSummarizer()         # creates its own TranscriptDatabase
+```
+
+**Methods:**
+
+| Method | Description |
+|---|---|
+| `run()` | Summarize all pending transcripts. Returns count of summaries saved. Idempotent. |
+| `_summarize_one(video_id, title, channel, transcript)` | Summarize a single transcript with Claude → Ollama fallback. Returns `(summary, model_name)` or `None` if both fail. |
+| `_summarize_with_claude(prompt)` | Call Anthropic Messages API. Raises on any failure. |
+| `_summarize_with_ollama(prompt)` | Call local Ollama server. Raises on any failure. |
+| `_build_prompt(title, channel, transcript)` | Fill the prompt template with video-specific values. |
+
+## Database Schema
+
+New table: `summaries` (in `data/transcripts.db`)
+
+| Column | SQLite Type | Description |
+|---|---|---|
+| `video_id` | `TEXT PRIMARY KEY` | FK to `transcripts.video_id` |
+| `summary` | `TEXT NOT NULL` | AI-generated summary text (Markdown) |
+| `model_used` | `TEXT NOT NULL` | Model that produced the summary (e.g. `claude-haiku-4-5-20251001`) |
+| `created_at` | `TEXT NOT NULL` | UTC ISO 8601 timestamp of when the summary was saved |
+
+`TranscriptDatabase` exposes three methods for this table:
+
+| Method | Description |
+|---|---|
+| `save_summary(video_id, summary, model_used)` | `INSERT OR IGNORE` — skips if summary already exists. Returns `True` if inserted. |
+| `load_summaries()` | Return full `summaries` table as a pandas DataFrame. |
+| `get_unsummarized_transcripts()` | LEFT JOIN — returns only transcripts with no summary row and `transcript_available = 1`. |
+
+## Prompt Template
+
+The prompt instructs the model to produce a structured, specific summary focused on:
+
+- Cards or sets discussed (names, set symbols, rarity)
+- Market price movements or valuations
+- Investment advice or speculation (buy/hold/sell signals)
+- Pack opening results and notable pulls
+- Grading or PSA-related commentary
+- Meta shifts or competitive deck recommendations
+- Price predictions or market sentiment
+
+The video `title` and `channel` are injected into the prompt to provide context the model would not otherwise have from the transcript text alone.
+
+## Fallback Mechanism
+
+```
+_summarize_one()
+    │
+    ├── try: Claude Haiku
+    │       SUCCESS → return (text, "claude-haiku-4-5-20251001")
+    │       ANY EXCEPTION → log WARNING → fall through
+    │
+    ├── try: Ollama
+    │       SUCCESS → return (text, "gpt-oss:20b")
+    │       ANY EXCEPTION → log ERROR → return None
+    │
+    └── None → video skipped, remains pending for next run
+```
+
+A `None` result does not crash the pipeline — the loop continues to the next video, and the failed video will be retried automatically on the next run.
+
+## Idempotency
+
+- `get_unsummarized_transcripts()` gates entry via a `LEFT JOIN`: only videos with no row in `summaries` are returned.
+- `save_summary()` uses `INSERT OR IGNORE`: re-running never creates duplicate summaries.
+- A video that fails both models on run N will be retried on run N+1.
+
+## Usage
+
+```python
+from src.database.transcript_db import TranscriptDatabase
+from src.summarizer.summarizer import TranscriptSummarizer
+
+db = TranscriptDatabase()
+summarizer = TranscriptSummarizer(db=db)
+n = summarizer.run()
+print(f"{n} new summary/summaries saved.")
+
+# Inspect results
+summaries = db.load_summaries()
+print(summaries[['video_id', 'model_used', 'created_at']])
+```
+
+## Configuration
+
+| Setting | Config key | Default | Description |
+|---|---|---|---|
+| `anthropic_api_key` | `ANTHROPIC_API_KEY` | `None` | Anthropic API key. If absent, Claude is skipped and Ollama is used. |
+| `claude_model` | `CLAUDE_MODEL` | `claude-haiku-4-5-20251001` | Claude model to use for summarization |
+| `ollama_model` | `OLLAMA_MODEL` | `gpt-oss:20b` | Ollama model for fallback summarization |
+| `ollama_base_url` | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `summary_max_tokens` | `SUMMARY_MAX_TOKENS` | `1024` | Max tokens for the generated summary |
+
+Add to `.env`:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+For Ollama fallback, the server must be running with the model pulled:
+
+```bash
+ollama pull gpt-oss:20b
+```
+
+## Design Decisions
+
+- **Cheapest Claude model** — `claude-haiku-4-5-20251001` is the most cost-effective Claude model, appropriate for bulk summarization of many transcripts.
+- **Broad exception catch for fallback** — The Anthropic SDK raises many different exception types (auth, rate limit, network). Catching `Exception` is intentional at this resilience boundary; the type and message are always logged.
+- **Lazy Claude client** — `anthropic.Anthropic()` is only constructed on the first Claude call. A missing API key raises `AuthenticationError` inside the try-block, triggering the Ollama fallback cleanly without any pre-flight checks.
+- **`db` injection** — `main.py` constructs one `TranscriptDatabase` and passes it to both `save()` and `TranscriptSummarizer`, avoiding redundant SQLite connections.
+- **One summary per video** — `video_id` is the `PRIMARY KEY` of the `summaries` table. If you want to re-summarize with a different model, delete the row first.
