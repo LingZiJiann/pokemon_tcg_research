@@ -1,10 +1,15 @@
 from src.youtube_transcripts.youtube_transcript import YouTubeTranscriptCollector
 from src.embeddings.vector_store import VectorStore
+from src.database.transcript_db import TranscriptDatabase
 
 
 def main():
     collector = YouTubeTranscriptCollector()
     df = collector.collect()
+
+    db = TranscriptDatabase()
+    new_rows = db.save(df)
+    print(f"SQLite: {new_rows} new transcript(s) saved.")
 
     store = VectorStore()
     store.add_from_dataframe(df)
