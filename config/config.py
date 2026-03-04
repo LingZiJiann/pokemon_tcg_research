@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # List of YouTube channel handles to scrape transcripts from
     channels: list[str] = [
         "@TwicebakedJake",
-        "@okJLUV",
+        "@@DannyPhantump",
     ]
 
     # Maximum number of recent videos to process per channel
