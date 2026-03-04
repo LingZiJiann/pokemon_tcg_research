@@ -47,5 +47,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     summary_max_tokens: int = 1024
 
+    # Verification agent (Tavily)
+    tavily_api_key: str
+    max_cards_per_verification: int = 5
+    verification_search_depth: str = "basic"
+
 
 settings = Settings()
