@@ -74,8 +74,6 @@ verifier = TranscriptVerifier()         # creates its own TranscriptDatabase
 
 ### Updated table: `summaries`
 
-Two new nullable columns added via idempotent `ALTER TABLE` migration on startup:
-
 | Column | SQLite Type | Description |
 |---|---|---|
 | `refined_summary` | `TEXT` | Claude-refined summary incorporating verified price data |
