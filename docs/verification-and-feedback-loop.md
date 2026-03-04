@@ -180,6 +180,5 @@ pip install tavily-python
 - **Tavily for eBay** — eBay's public Finding API for completed listings was deprecated. Using Tavily to search `site:ebay.com` sold listings is simpler (no extra credentials) and produces usable price snippets for the refinement prompt.
 - **Separate `verifications` table** — Keeps verification data independent of the summary. Verification can be re-run as prices change without touching the original summary.
 - **`refined_summary` as a column, not a separate table** — Refined summaries are a 1:1 update to the existing summary row. A separate table would add a join with no benefit.
-- **Idempotent migration** — On startup, `TranscriptDatabase` checks `PRAGMA table_info(summaries)` before issuing `ALTER TABLE`, so existing databases with the old schema are upgraded safely on first run.
 - **Lazy client construction** — Both `anthropic.Anthropic()` and `TavilyClient()` are constructed only on first use, keeping startup cost low and making API key errors visible at the point of use.
 - **Card count cap** — `max_cards_per_verification` (default 5) prevents runaway API usage on transcripts that mention dozens of cards.
