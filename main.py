@@ -2,6 +2,7 @@ from src.youtube_transcripts.youtube_transcript import YouTubeTranscriptCollecto
 from src.embeddings.vector_store import VectorStore
 from src.database.transcript_db import TranscriptDatabase
 from src.summarizer.summarizer import TranscriptSummarizer
+from src.verifier.verifier import TranscriptVerifier
 
 
 def main():
@@ -15,6 +16,10 @@ def main():
     summarizer = TranscriptSummarizer(db=db)
     summaries_saved = summarizer.run()
     print(f"Summarizer: {summaries_saved} new summary/summaries saved.")
+
+    verifier = TranscriptVerifier(db=db)
+    verified = verifier.run()
+    print(f"Verifier: {verified} summary/summaries verified and refined.")
 
     store = VectorStore()
     store.add_from_dataframe(df)
