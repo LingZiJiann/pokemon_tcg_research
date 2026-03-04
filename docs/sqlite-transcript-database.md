@@ -2,7 +2,7 @@
 
 ## Overview
 
-Raw transcript DataFrames produced by `YouTubeTranscriptCollector.collect()` are persisted to a local SQLite database. This avoids re-fetching data from the YouTube API on every run and provides a queryable store of the raw collected data, independent of the ChromaDB vector store.
+Raw transcript DataFrames produced by `YouTubeTranscriptCollector.collect()` are persisted to a local SQLite database. This avoids re-fetching data from the YouTube API on every run and provides a queryable store of the raw collected data.
 
 ## Architecture
 
@@ -12,12 +12,8 @@ YouTubeTranscriptCollector.collect()
         ▼
   pandas DataFrame
         │
-        ├──► TranscriptDatabase.save()  — persist raw rows to SQLite (data/transcripts.db)
-        │
-        └──► VectorStore.add_from_dataframe()  — chunk, embed, upsert to ChromaDB
+        └──► TranscriptDatabase.save()  — persist raw rows to SQLite (data/transcripts.db)
 ```
-
-SQLite and ChromaDB operate independently — saving to one has no effect on the other.
 
 ## Components
 
@@ -90,5 +86,5 @@ TRANSCRIPT_DB_PATH=./data/transcripts.db
 
 - **Idempotent inserts** — `INSERT OR IGNORE` with `video_id` as `PRIMARY KEY` means re-running the pipeline never creates duplicate rows, without needing a pre-query check.
 - **No new dependencies** — `sqlite3` is part of the Python standard library. Nothing is added to `pyproject.toml`.
-- **Separate from ChromaDB** — The SQLite store holds the full raw DataFrame (including complete transcript text). ChromaDB holds chunked, embedded vectors for semantic search. Each serves a different purpose.
+- **Single store** — The SQLite database holds the full raw DataFrame (including complete transcript text), serving as the sole persistence layer for collected data.
 - **`bool` round-trip** — `transcript_available` is cast to `int` on write and back to `bool` on read, preserving the original DataFrame schema for downstream consumers.

@@ -1,5 +1,4 @@
 from src.youtube_transcripts.youtube_transcript import YouTubeTranscriptCollector
-from src.embeddings.vector_store import VectorStore
 from src.database.transcript_db import TranscriptDatabase
 from src.summarizer.summarizer import TranscriptSummarizer
 from src.verifier.verifier import TranscriptVerifier
@@ -20,10 +19,6 @@ def main():
     verifier = TranscriptVerifier(db=db)
     verified = verifier.run()
     print(f"Verifier: {verified} summary/summaries verified and refined.")
-
-    store = VectorStore()
-    store.add_from_dataframe(df)
-    print(f"Collection size: {store.collection.count()} chunks")
 
 
 if __name__ == "__main__":

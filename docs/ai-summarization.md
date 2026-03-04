@@ -2,7 +2,7 @@
 
 ## Overview
 
-Raw transcripts stored in SQLite are summarized by an AI agent after each collection run. Summaries are persisted to a dedicated `summaries` table in the same database, independent of the ChromaDB vector store.
+Raw transcripts stored in SQLite are summarized by an AI agent after each collection run. Summaries are persisted to a dedicated `summaries` table in the same database.
 
 Claude Haiku (`claude-haiku-4-5-20251001`) is used as the primary model — the cheapest Claude model. If Claude fails for any reason (missing API key, rate limit, network error), the agent falls back automatically to a local Ollama model.
 

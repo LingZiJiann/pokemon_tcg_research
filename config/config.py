@@ -30,13 +30,6 @@ class Settings(BaseSettings):
     api_retry_base_delay: float = 2.0
     api_retry_max_delay: float = 60.0
 
-    # Embeddings & vector store
-    embedding_model: str = "all-MiniLM-L6-v2"
-    chunk_size: int = 500
-    chunk_overlap: int = 100
-    vector_db_path: str = "./data/chroma_db"
-    collection_name: str = "pokemon_tcg_transcripts"
-
     # SQLite transcript store
     transcript_db_path: str = "./data/transcripts.db"
 
