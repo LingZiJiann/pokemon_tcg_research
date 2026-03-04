@@ -14,6 +14,7 @@ Collect YouTube transcripts from Pokemon TCG content creators, embed them into a
 | Config | `pydantic-settings` + `.env` |
 | YouTube data | YouTube Data API v3 + `youtube-transcript-api` |
 | Summarization | Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) + Ollama fallback (`gpt-oss:20b`) |
+| Verification | Tavily search API (general market + eBay last-sold) |
 | Embedding model | `all-MiniLM-L6-v2` (local, via `sentence-transformers`) |
 | Vector database | ChromaDB (persistent, on-disk) |
 | Data wrangling | pandas |
@@ -22,7 +23,7 @@ Collect YouTube transcripts from Pokemon TCG content creators, embed them into a
 
 ```
 pokemon_tcg_research/
-├── main.py                         # Entry point: collect → save → summarize → embed → query
+├── main.py                         # Entry point: collect → save → summarize → verify → embed
 ├── youtube_transcript.ipynb        # Prototype notebook: fetch & inspect transcripts interactively
 ├── config/
 │   └── config.py                   # Pydantic Settings (all config + .env overrides)
@@ -30,9 +31,11 @@ pokemon_tcg_research/
 │   ├── youtube_transcripts/
 │   │   └── youtube_transcript.py   # YouTubeTranscriptCollector — fetch & retry
 │   ├── database/
-│   │   └── transcript_db.py        # TranscriptDatabase — persist & load raw transcripts + summaries (SQLite)
+│   │   └── transcript_db.py        # TranscriptDatabase — persist & load transcripts, summaries, verifications (SQLite)
 │   ├── summarizer/
 │   │   └── summarizer.py           # TranscriptSummarizer — Claude Haiku + Ollama fallback
+│   ├── verifier/
+│   │   └── verifier.py             # TranscriptVerifier — Tavily + eBay verification + Claude refinement (feedback loop)
 │   ├── embeddings/
 │   │   ├── chunker.py              # chunk_text() — character-based overlap chunking
 │   │   └── vector_store.py         # VectorStore — embed, upsert, query
@@ -40,7 +43,7 @@ pokemon_tcg_research/
 │       └── logger.py               # Shared logger
 ├── data/                           # Persistent data files (gitignored)
 │   ├── chroma_db/                  # ChromaDB vector store
-│   └── transcripts.db              # SQLite database (transcripts + summaries tables)
+│   └── transcripts.db              # SQLite database (transcripts + summaries + verifications tables)
 ├── logs/                           # Per-run log files
 ├── docs/                           # Feature documentation (auto-loaded by PROJECT.md)
 └── pyproject.toml
@@ -61,6 +64,12 @@ pandas DataFrame
        │           │
        │           ▼
        │    TranscriptSummarizer.run()          — Claude Haiku (→ Ollama fallback) → SQLite (summaries table)
+       │           │
+       │           ▼
+       │    TranscriptVerifier.run()            — Tavily + eBay price search → SQLite (verifications table)
+       │           │                              Claude re-prompted with verification → SQLite (summaries.refined_summary)
+       │           ▼
+       │    [feedback loop complete]
        │
        └──► VectorStore.add_from_dataframe()   — chunks, embeds, upserts into ChromaDB
                    │
@@ -93,6 +102,9 @@ pandas DataFrame
 | `OLLAMA_MODEL` | `gpt-oss:20b` | Ollama model for summarization fallback |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `SUMMARY_MAX_TOKENS` | `1024` | Max tokens for generated summaries |
+| `TAVILY_API_KEY` | — | Tavily API key for verification searches (optional — skips verification if absent) |
+| `MAX_CARDS_PER_VERIFICATION` | `5` | Max cards to search per video (caps Tavily API calls) |
+| `VERIFICATION_SEARCH_DEPTH` | `basic` | Tavily search depth: `basic` or `advanced` |
 
 ## Features Completed
 
@@ -105,6 +117,8 @@ pandas DataFrame
 - [x] Semantic query with optional metadata filtering
 - [x] SQLite transcript database: raw transcript storage with idempotent inserts, independent of ChromaDB
 - [x] AI summarization agent: Claude Haiku primary with Ollama fallback, summaries persisted to SQLite
+- [x] Verification agent: Tavily search (general market + eBay last-sold) cross-checks price claims in each summary
+- [x] Feedback loop: verified price data fed back to Claude to produce a refined summary, stored alongside the original
 
 ## Documentation
 
@@ -115,3 +129,4 @@ Feature docs live in [`docs/`](docs/):
 - [`embeddings-and-vector-store.md`](docs/embeddings-and-vector-store.md) — chunking, embedding model, ChromaDB schema, query format
 - [`sqlite-transcript-database.md`](docs/sqlite-transcript-database.md) — `TranscriptDatabase` class, schema, idempotent save/load, design decisions
 - [`ai-summarization.md`](docs/ai-summarization.md) — `TranscriptSummarizer` class, Claude + Ollama fallback, summaries schema, prompt template, idempotency
+- [`verification-and-feedback-loop.md`](docs/verification-and-feedback-loop.md) — `TranscriptVerifier` class, Tavily + eBay search, verifications schema, refined summary feedback loop, configuration
