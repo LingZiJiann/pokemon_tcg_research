@@ -30,12 +30,12 @@ class TranscriptDatabase:
 
     _CREATE_SUMMARIES_TABLE = """
         CREATE TABLE IF NOT EXISTS summaries (
-            video_id        TEXT PRIMARY KEY REFERENCES transcripts(video_id),
-            summary         TEXT NOT NULL,
-            model_used      TEXT NOT NULL,
-            created_at      TEXT NOT NULL,
-            refined_summary TEXT,
-            refined_at      TEXT
+            video_id             TEXT PRIMARY KEY REFERENCES transcripts(video_id),
+            summary              TEXT NOT NULL,
+            model_used           TEXT NOT NULL,
+            created_at           TEXT NOT NULL,
+            buy_recommendations  TEXT,
+            recommendations_at   TEXT
         )
     """
 
@@ -207,14 +207,16 @@ class TranscriptDatabase:
             )
         return inserted
 
-    def save_refined_summary(self, video_id: str, refined_summary: str) -> None:
-        """Update the summaries row with a refined summary from the feedback loop."""
-        refined_at = datetime.now(timezone.utc).isoformat()
+    def save_buy_recommendations(self, video_id: str, recommendations: str) -> None:
+        """Update the summaries row with buy recommendations from the feedback loop."""
+        recommendations_at = datetime.now(timezone.utc).isoformat()
         sql = """
             UPDATE summaries
-            SET refined_summary = ?, refined_at = ?
+            SET buy_recommendations = ?, recommendations_at = ?
             WHERE video_id = ?
         """
         with self._connect() as conn:
-            conn.execute(sql, (refined_summary, refined_at, video_id))
-        logger.info(f"save_refined_summary() — updated refined summary for {video_id}.")
+            conn.execute(sql, (recommendations, recommendations_at, video_id))
+        logger.info(
+            f"save_buy_recommendations() — updated buy recommendations for {video_id}."
+        )

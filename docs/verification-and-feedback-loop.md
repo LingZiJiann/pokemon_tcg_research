@@ -2,11 +2,11 @@
 
 ## Overview
 
-After each summarization run, a verification agent cross-checks the AI-generated summary against real-world market data. It searches Tavily (general market) and eBay last-sold listings (via Tavily) for every card mentioned in the summary, then feeds the findings back to Claude to produce a **refined summary** — the feedback loop.
+After each summarization run, a verification agent cross-checks the AI-generated summary against real-world market data. It searches Tavily (general market) and eBay last-sold listings (via Tavily) for every card mentioned in the summary, then feeds the findings back to Claude to produce **buy recommendations** — per-card buy/skip verdicts and a ranked list of top picks.
 
-Results are persisted to two new structures in `data/transcripts.db`:
+Results are persisted to two structures in `data/transcripts.db`:
 - A `verifications` table storing the price report, sources, and raw price data per video.
-- Two new columns on the existing `summaries` table: `refined_summary` and `refined_at`.
+- Two columns on the existing `summaries` table: `buy_recommendations` and `recommendations_at`.
 
 ## Architecture
 
@@ -29,10 +29,10 @@ For each card (up to max_cards_per_verification):
 TranscriptDatabase.save_verification()   — INSERT OR IGNORE into verifications
         │
         ▼
-TranscriptVerifier._refine_summary()     — Claude re-prompted with initial summary + verification report
+TranscriptVerifier._generate_buy_recommendations() — Claude produces buy/skip verdicts + ranked top picks
         │
         ▼
-TranscriptDatabase.save_refined_summary()  — UPDATE summaries SET refined_summary, refined_at
+TranscriptDatabase.save_buy_recommendations()  — UPDATE summaries SET buy_recommendations, recommendations_at
 ```
 
 ## Components
@@ -57,7 +57,7 @@ verifier = TranscriptVerifier()         # creates its own TranscriptDatabase
 | `_verify_summary(summary)` | Extracts cards, runs Tavily searches, returns `{price_data, sources, report}`. |
 | `_extract_cards(summary)` | Asks Claude Haiku to extract a JSON list of `{card_name, claimed_price}` from the summary text. |
 | `_search_card_prices(card_name)` | Runs two Tavily searches (general market + eBay sold) for one card. Returns `(snippets, sources)`. |
-| `_refine_summary(initial_summary, verification)` | Re-prompts Claude with the initial summary and verification report to produce a grounded refined summary. Falls back to the initial summary if Claude fails. |
+| `_generate_buy_recommendations(initial_summary, verification)` | Re-prompts Claude with the initial summary and verification report to produce per-card buy/skip verdicts and a ranked list of top picks. Returns a fallback message if Claude fails. |
 
 ## Database Schema
 
@@ -76,8 +76,8 @@ verifier = TranscriptVerifier()         # creates its own TranscriptDatabase
 
 | Column | SQLite Type | Description |
 |---|---|---|
-| `refined_summary` | `TEXT` | Claude-refined summary incorporating verified price data |
-| `refined_at` | `TEXT` | UTC ISO 8601 timestamp of the refinement |
+| `buy_recommendations` | `TEXT` | Claude-generated buy/skip verdicts and ranked top picks based on verified price data |
+| `recommendations_at` | `TEXT` | UTC ISO 8601 timestamp of the recommendation generation |
 
 ### New `TranscriptDatabase` methods
 
@@ -85,7 +85,7 @@ verifier = TranscriptVerifier()         # creates its own TranscriptDatabase
 |---|---|
 | `get_unverified_summaries()` | LEFT JOIN summaries → verifications. Returns rows with no verification, joined to the original transcript. |
 | `save_verification(video_id, report, sources, price_data, model_used)` | `INSERT OR IGNORE` into `verifications`. Returns `True` if inserted. |
-| `save_refined_summary(video_id, refined_summary)` | `UPDATE summaries` to set `refined_summary` and `refined_at`. |
+| `save_buy_recommendations(video_id, recommendations)` | `UPDATE summaries` to set `buy_recommendations` and `recommendations_at`. |
 
 ## Prompt Templates
 
@@ -93,13 +93,12 @@ verifier = TranscriptVerifier()         # creates its own TranscriptDatabase
 
 Instructs Claude to return a JSON array of `{card_name, claimed_price}` objects from the summary text. Response is parsed with `json.loads()`. Markdown code fences are stripped if present.
 
-### Refinement prompt (feedback loop)
+### Buy recommendation prompt (feedback loop)
 
-Instructs Claude to refine the initial summary by:
-- Incorporating verified prices where the Tavily data confirms or updates the claim
-- Correcting discrepancies found by the verification
-- Noting cards whose prices could not be verified
-- Keeping the same structured format as the initial summary
+Instructs Claude to produce buy recommendations by:
+- Providing a **Buy** or **Skip** verdict for each card with justification comparing claimed vs. verified prices
+- Ending with a **ranked list of top picks** ordered by value opportunity
+- Considering price accuracy, current market trends, recent sold prices, and potential upside
 
 ## Tavily Searches
 
@@ -116,7 +115,7 @@ Two searches are run per card:
 
 - `get_unverified_summaries()` gates entry via a `LEFT JOIN`: only summaries with no row in `verifications` are returned.
 - `save_verification()` uses `INSERT OR IGNORE`: re-running never creates duplicate verification rows.
-- `save_refined_summary()` uses `UPDATE`, so it overwrites if re-run (only reachable after a fresh verification insert anyway).
+- `save_buy_recommendations()` uses `UPDATE`, so it overwrites if re-run (only reachable after a fresh verification insert anyway).
 - A video that fails verification is not inserted into `verifications`, so it will be retried on the next run.
 
 ## Graceful Degradation
@@ -124,7 +123,7 @@ Two searches are run per card:
 - If `TAVILY_API_KEY` is not set, `run()` logs a warning and returns `0` — the rest of the pipeline is unaffected.
 - If card extraction fails (Claude error, JSON parse error), verification proceeds with an empty card list and a `"No cards identified"` report.
 - If a Tavily search fails for an individual card, it is skipped and the other cards are still processed.
-- If the refinement Claude call fails, `_refine_summary()` returns the original initial summary unchanged.
+- If the recommendation Claude call fails, `_generate_buy_recommendations()` returns a fallback message.
 
 ## Usage
 
@@ -135,11 +134,11 @@ from src.verifier.verifier import TranscriptVerifier
 db = TranscriptDatabase()
 verifier = TranscriptVerifier(db=db)
 n = verifier.run()
-print(f"{n} summary/summaries verified and refined.")
+print(f"{n} summary/summaries verified with buy recommendations.")
 
 # Inspect results
 summaries = db.load_summaries()
-print(summaries[['video_id', 'summary', 'refined_summary', 'refined_at']])
+print(summaries[['video_id', 'summary', 'buy_recommendations', 'recommendations_at']])
 ```
 
 To inspect verifications directly, query the `verifications` table via SQLite:
@@ -177,6 +176,6 @@ pip install tavily-python
 
 - **Tavily for eBay** — eBay's public Finding API for completed listings was deprecated. Using Tavily to search `site:ebay.com` sold listings is simpler (no extra credentials) and produces usable price snippets for the refinement prompt.
 - **Separate `verifications` table** — Keeps verification data independent of the summary. Verification can be re-run as prices change without touching the original summary.
-- **`refined_summary` as a column, not a separate table** — Refined summaries are a 1:1 update to the existing summary row. A separate table would add a join with no benefit.
+- **`buy_recommendations` as a column, not a separate table** — Buy recommendations are a 1:1 update to the existing summary row. A separate table would add a join with no benefit.
 - **Lazy client construction** — Both `anthropic.Anthropic()` and `TavilyClient()` are constructed only on first use, keeping startup cost low and making API key errors visible at the point of use.
 - **Card count cap** — `max_cards_per_verification` (default 5) prevents runaway API usage on transcripts that mention dozens of cards.

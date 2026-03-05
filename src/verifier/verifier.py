@@ -4,8 +4,8 @@ For each AI-generated summary, this agent:
 1. Extracts card names and claimed prices using Claude.
 2. Searches Tavily for current market prices and eBay last-sold listings.
 3. Stores a structured verification report in the ``verifications`` table.
-4. Feeds the verification data back to Claude to produce a refined summary
-   (feedback loop), stored as ``refined_summary`` in the ``summaries`` table.
+4. Feeds the verification data back to Claude to produce buy recommendations
+   (feedback loop), stored as ``buy_recommendations`` in the ``summaries`` table.
 """
 
 import json
@@ -32,16 +32,24 @@ SUMMARY:
 
 JSON ARRAY:"""
 
-_REFINE_PROMPT = """\
-You are an expert Pokemon TCG analyst. You previously wrote the summary below \
-for a YouTube video. Real-world verification data has now been collected from \
-current web searches and eBay last-sold listings.
+_BUY_RECOMMENDATION_PROMPT = """\
+You are an expert Pokemon TCG market analyst. A YouTube video summary and \
+real-world verification data (web searches and eBay last-sold listings) are \
+provided below.
 
-Refine your summary to:
-- Incorporate verified prices where the data confirms or updates the original claim
-- Correct any price discrepancies found by the verification
-- Note cards whose prices could not be verified
-- Keep the same structured format
+Produce buy recommendations:
+
+1. **Per-card verdicts** — For each card mentioned, output:
+   - Card name
+   - **Buy** or **Skip** verdict
+   - Short justification comparing the video's claimed price against verified \
+market data (is it undervalued, overpriced, or fairly priced?)
+
+2. **Top Picks (ranked)** — End with a ranked list of the best cards to buy, \
+ordered by value opportunity. Include a brief reason for each pick.
+
+Consider: price accuracy from the video, current market trends, recent sold \
+prices, and potential upside.
 
 INITIAL SUMMARY:
 {summary}
@@ -49,7 +57,7 @@ INITIAL SUMMARY:
 VERIFICATION DATA:
 {report}
 
-REFINED SUMMARY:"""
+BUY RECOMMENDATIONS:"""
 
 
 class TranscriptVerifier:
@@ -190,12 +198,14 @@ class TranscriptVerifier:
         }
 
     # ------------------------------------------------------------------
-    # Feedback loop — refined summary
+    # Feedback loop — buy recommendations
     # ------------------------------------------------------------------
 
-    def _refine_summary(self, initial_summary: str, verification: dict) -> str:
-        """Re-prompt Claude with the initial summary + verification data."""
-        prompt = _REFINE_PROMPT.format(
+    def _generate_buy_recommendations(
+        self, initial_summary: str, verification: dict
+    ) -> str:
+        """Re-prompt Claude with the initial summary + verification data to produce buy recommendations."""
+        prompt = _BUY_RECOMMENDATION_PROMPT.format(
             summary=initial_summary,
             report=verification["report"],
         )
@@ -208,9 +218,9 @@ class TranscriptVerifier:
             return response.content[0].text
         except Exception as exc:
             logger.warning(
-                f"_refine_summary() — Claude failed: {exc}. Keeping initial summary."
+                f"_generate_buy_recommendations() — Claude failed: {exc}. Returning empty recommendations."
             )
-            return initial_summary
+            return "No buy recommendations could be generated."
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -247,13 +257,17 @@ class TranscriptVerifier:
                     price_data=json.dumps(verification["price_data"]),
                     model_used=settings.claude_model,
                 )
-                refined = self._refine_summary(
+                recommendations = self._generate_buy_recommendations(
                     initial_summary=row["summary"],
                     verification=verification,
                 )
-                self.db.save_refined_summary(video_id=video_id, refined_summary=refined)
+                self.db.save_buy_recommendations(
+                    video_id=video_id, recommendations=recommendations
+                )
                 verified += 1
-                logger.info(f"run() — verified and refined summary for {video_id}.")
+                logger.info(
+                    f"run() — verified and generated buy recommendations for {video_id}."
+                )
             except Exception as exc:
                 logger.error(
                     f"run() — failed for {video_id}: {type(exc).__name__}: {exc}. Skipping."

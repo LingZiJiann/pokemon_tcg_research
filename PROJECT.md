@@ -33,7 +33,7 @@ pokemon_tcg_research/
 │   ├── summarizer/
 │   │   └── summarizer.py           # TranscriptSummarizer — Claude Haiku + Ollama fallback
 │   ├── verifier/
-│   │   └── verifier.py             # TranscriptVerifier — Tavily + eBay verification + Claude refinement (feedback loop)
+│   │   └── verifier.py             # TranscriptVerifier — Tavily + eBay verification + Claude buy recommendations (feedback loop)
 │   └── utils/
 │       └── logger.py               # Shared logger
 ├── data/                           # Persistent data files (gitignored)
@@ -61,7 +61,7 @@ pandas DataFrame
                    │
                    ▼
             TranscriptVerifier.run()            — Tavily + eBay price search → SQLite (verifications table)
-                   │                              Claude re-prompted with verification → SQLite (summaries.refined_summary)
+                   │                              Claude generates buy recommendations → SQLite (summaries.buy_recommendations)
                    ▼
             [feedback loop complete]
 ```
@@ -95,7 +95,7 @@ pandas DataFrame
 - [x] SQLite transcript database: raw transcript storage with idempotent inserts
 - [x] AI summarization agent: Claude Haiku primary with Ollama fallback, summaries persisted to SQLite
 - [x] Verification agent: Tavily search (general market + eBay last-sold) cross-checks price claims in each summary
-- [x] Feedback loop: verified price data fed back to Claude to produce a refined summary, stored alongside the original
+- [x] Feedback loop: verified price data fed back to Claude to produce buy recommendations (per-card buy/skip verdicts + ranked top picks), stored alongside the original summary
 
 ## Documentation
 
@@ -105,4 +105,4 @@ Feature docs live in [`docs/`](docs/):
 - [`api-rate-limiting.md`](docs/api-rate-limiting.md) — rate limiting, retry logic, error handling table
 - [`sqlite-transcript-database.md`](docs/sqlite-transcript-database.md) — `TranscriptDatabase` class, schema, idempotent save/load, design decisions
 - [`ai-summarization.md`](docs/ai-summarization.md) — `TranscriptSummarizer` class, Claude + Ollama fallback, summaries schema, prompt template, idempotency
-- [`verification-and-feedback-loop.md`](docs/verification-and-feedback-loop.md) — `TranscriptVerifier` class, Tavily + eBay search, verifications schema, refined summary feedback loop, configuration
+- [`verification-and-feedback-loop.md`](docs/verification-and-feedback-loop.md) — `TranscriptVerifier` class, Tavily + eBay search, verifications schema, buy recommendations feedback loop, configuration
