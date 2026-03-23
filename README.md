@@ -2,6 +2,14 @@
 
 Sentiment and market analysis on Pokemon TCG based on influential YouTubers.
 
+## Motivation
+
+Pokemon TCG YouTube influencers regularly make bold claims about card prices and market trends — but how do you know what's actually worth acting on? This project was born from three needs:
+
+1. **Understand current market trends** — aggregate what influential YouTubers are saying to get a pulse on the Pokemon TCG market without watching hours of content.
+2. **Verify their claims** — cross-check price predictions and "buy now" calls against real market data (eBay last-sold prices, general market sources) so hype doesn't drive bad decisions.
+3. **Get actionable insights** — when claims hold up, surface concrete buy/skip recommendations ranked by confidence so you can act quickly on genuine opportunities.
+
 ## Features
 
 - **YouTube transcript collection** — channel-based video discovery with configurable pagination and rate limiting
