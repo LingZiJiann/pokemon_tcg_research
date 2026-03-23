@@ -53,7 +53,7 @@ pandas DataFrame
 | Verification | Tavily search API (general market + eBay last-sold) |
 | Data wrangling | pandas |
 
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 
@@ -88,11 +88,27 @@ TAVILY_API_KEY=your_tavily_api_key
 
 ## Usage
 
+Run the full pipeline:
+
 ```bash
 python main.py
 ```
 
-This runs the full pipeline: collect transcripts, save to SQLite, summarize with AI, verify prices, and generate buy recommendations.
+This executes each stage in order: collect transcripts, save to SQLite, summarize with AI, verify prices, and generate buy recommendations.
+
+### Customizing channels
+
+Override the default channels via `.env`:
+
+```env
+CHANNELS=["@TwicebakedJake", "@okJLUV", "@YourChannel"]
+MAX_VIDEOS_PER_CHANNEL=3
+```
+
+### Running without optional APIs
+
+- **No Anthropic key** — summarization falls back to Ollama (must be running locally).
+- **No Tavily key** — verification and buy recommendations are skipped; you still get transcripts and summaries.
 
 ## Configuration
 
@@ -150,3 +166,22 @@ Detailed feature docs live in [`docs/`](docs/):
 - [SQLite Database](docs/sqlite-transcript-database.md) — `TranscriptDatabase` class, schema, idempotent operations
 - [AI Summarization](docs/ai-summarization.md) — `TranscriptSummarizer` class, Claude + Ollama fallback, prompt template
 - [Verification & Feedback Loop](docs/verification-and-feedback-loop.md) — `TranscriptVerifier` class, Tavily search, buy recommendations
+
+## Contributing
+
+Contributions are welcome! To get started:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Make your changes
+4. Run the pipeline locally to verify everything works
+5. Commit your changes (`git commit -m "add: your feature description"`)
+6. Push to your branch (`git push origin feature/your-feature`)
+7. Open a Pull Request
+
+### Guidelines
+
+- Follow existing code style and project structure
+- Keep PRs focused — one feature or fix per PR
+- Update or add documentation in `docs/` for any new functionality
+- Add meaningful commit messages that describe the "why", not just the "what"
